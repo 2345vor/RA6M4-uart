@@ -1,191 +1,252 @@
-# 瑞萨 CPK-RA6M4 开发板 BSP 说明
+@[toc](【Renesas RA6M4开发板之UART与Serial studio串口交互】)
 
-## 简介
+# 1.0 UART简介
+UART（Universal Asynchronous Receiver/Transmitter）通用异步收发传输器，UART 作为异步串口通信协议的一种，工作原理是将传输数据的每个字符一位接一位地传输。是在应用程序开发过程中使用频率最高的数据总线。
 
-本文档为瑞萨 CPK-RA6M4 开发板提供的 BSP (板级支持包) 说明。通过阅读快速上手章节开发者可以快速地上手该 BSP，将 RT-Thread 运行在开发板上。
+![在这里插入图片描述](https://img-blog.csdnimg.cn/33cdaa2e3db3494b98eeb3c3e56955ab.png)
 
-主要内容如下：
+## 1.1 原理
+UART 串口的特点是将数据一位一位地顺序传送，只要 2 根传输线就可以实现双向通信，一根线发送数据的同时用另一根线接收数据。UART 串口通信有几个重要的参数，分别是波特率、起始位、数据位、停止位和奇偶检验位，对于两个使用 UART 串口通信的端口，这些参数必须匹配，否则通信将无法正常完成。UART 串口传输的数据格式如下图所示：
+![在这里插入图片描述](https://img-blog.csdnimg.cn/3911ba1f77c549cf8b8a883f7966face.png)
+- 起始位：表示数据传输的开始，电平逻辑为 “0” 。
 
-- 开发板介绍
-- BSP 快速上手指南
+- 数据位：可能值有 5、6、7、8、9，表示传输这几个 bit 位数据。一般取值为 8，因为一个 ASCII 字符值为 8 位。
 
-## 开发板介绍
+- 奇偶校验位：用于接收方对接收到的数据进行校验，校验 “1” 的位数为偶数(偶校验)或奇数(奇校验)，以此来校验数据传送的正确性，使用时不需要此位也可以。
 
-基于瑞萨 RA6M4 MCU 开发的 CPK-RA6M4 MCU 评估板，通过灵活配置软件包和 IDE，可帮助用户对 RA6M4 MCU 群组的特性轻松进行评估，并对嵌入系统应用程序进行开发。
+- 停止位： 表示一帧数据的结束。电平逻辑为 “1”。
 
-开发板正面外观如下图：
+- 波特率：串口通信时的速率，它用单位时间内传输的二进制代码的有效位(bit)数来表示，其单位为每秒比特数 bit/s(bps)。常见的波特率值有 4800、9600、14400、38400、115200等，数值越大数据传输的越快，波特率为 115200 表示每秒钟传输 115200 位数据。
 
-![image-20211011174017429](docs/picture/cpk-ra6m4.png) 
+## 1.2 访问 PWM 设备
+应用程序通过 RT-Thread 提供的 PWM 设备管理接口来访问 PWM 设备硬件，相关接口如下所示：
 
-该开发板常用 **板载资源** 如下：
+|函数	|描述|
+| ------ | ------ |
+|函数|	描述|
+|[rt_device_find()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E6%9F%A5%E6%89%BE%E4%B8%B2%E5%8F%A3%E8%AE%BE%E5%A4%87)|	查找设备|
+|[rt_device_open()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E6%89%93%E5%BC%80%E4%B8%B2%E5%8F%A3%E8%AE%BE%E5%A4%87)	|打开设备|
+|[rt_device_read()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E6%8E%A5%E6%94%B6%E6%95%B0%E6%8D%AE)	|读取数据|
+|[rt_device_write()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E5%8F%91%E9%80%81%E6%95%B0%E6%8D%AE)	|写入数据|
+|[rt_device_control()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E6%8E%A7%E5%88%B6%E4%B8%B2%E5%8F%A3%E8%AE%BE%E5%A4%87)	|控制设备|
+|[rt_device_set_rx_indicate()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E8%AE%BE%E7%BD%AE%E6%8E%A5%E6%94%B6%E5%9B%9E%E8%B0%83%E5%87%BD%E6%95%B0)	|设置接收回调函数|
+|[rt_device_set_tx_complete()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E8%AE%BE%E7%BD%AE%E5%8F%91%E9%80%81%E5%AE%8C%E6%88%90%E5%9B%9E%E8%B0%83%E5%87%BD%E6%95%B0)	|设置发送完成回调函数|
+|[rt_device_close()](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart?id=%E5%85%B3%E9%97%AD%E4%B8%B2%E5%8F%A3%E8%AE%BE%E5%A4%87)	|关闭设备|
 
-- MCU：R7FA6M4AF3CFB，200MHz，Arm Cortex®-M33 内核，1MB 代码闪存, 256kB SRAM
-- 调试接口：板载 J-Link 接口
-- 扩展接口：两个 PMOD 连接器
+# 2. RT-theard配置
+## 2.1 硬件需求
+> 实现功能：
+> 采用UART0输出数据，Serial Studio作为上位机接收数据，显示对应端口的状态和传感器的动态显示，并且实现简单控制。
 
-**更多详细资料及工具**
+1、RA6M4开发板
+![在这里插入图片描述](https://img-blog.csdnimg.cn/4c5dcda23c6d4afaacb393dc46a7ae51.png)
+2、USB下载线，两个ch340串口和附带4根母母线，第一路串口是UART0端口**rx---p101;tx---p100**，实现Serial Studio上位机交互操作和可视化；第二路串口是UART7端口**rx---p613;tx---p614**，实现CMD命令输入。其他不变
+![在这里插入图片描述](https://img-blog.csdnimg.cn/51aa8153f6434230a25eb2bae3ae62b5.png)
 
-## 外设支持
-
-本 BSP 目前对外设的支持情况如下：
-
-| **片上外设** | **支持情况** | **备注** |
-| :----------------- | :----------------- | :------------- |
-| UART               | 支持               | UART7 为默认日志输出端口 |
-| GPIO               | 支持               |                |
-| IIC                | 支持               | 软件           |
-| WDT                | 支持               |                |
-| RTC                | 支持               |                |
-| ADC                | 支持               |                |
-| DAC                | 支持               |                |
-| SPI                | 支持               |                |
-| FLASH              | 支持               |                |
-| PWM                | 支持               |                |
-| CAN                | 支持               |                |
-| 持续更新中...      |                    |                |
-| **外接外设** | **支持情况** | **备注** |
-| WiFi 模块     | 支持        |  [RW007 WiFi 网络模块](https://github.com/RT-Thread-packages/rw007)  |
-| 温湿度传感器   | 支持       |  [HS300x 温湿度模块](https://github.com/Guozhanxin/hs300x) |
-| 室内空气质量传感器 | 支持 | [zmod4410 室内空气质量模块](https://github.com/ShermanShao/zmod4410) |
-| 光线传感器 | 支持 | [isl29035光线传感器模块](https://github.com/ShermanShao/isl29035) |
+硬件到此配置完成
 
 
-## 使用说明
+## 2.2 软件配置
+Renesas RA6M4开发板环境配置参照：[【基于 RT-Thread Studio的CPK-RA6M4 开发板环境搭建】](https://blog.csdn.net/vor234/article/details/125634313)
+1、新建项目RA6M4-uart工程
+![在这里插入图片描述](https://img-blog.csdnimg.cn/db8cad1586bd406784650f04192d17c5.png)
 
-使用说明分为如下两个章节：
 
-- 快速上手
+2、查阅RA6M4硬件资源，相关资料，在RT-theard Setting 硬件中需要使能uart0
+![在这里插入图片描述](https://img-blog.csdnimg.cn/6202d5be8bb3447597ed6599c9b8b5ab.png)
 
-  本章节是为刚接触 RT-Thread 的新手准备的使用说明，遵循简单的步骤即可将 RT-Thread 操作系统运行在该开发板上，看到实验效果 。
-- 进阶使用
 
-  本章节是为需要在 RT-Thread 操作系统上使用更多开发板资源的开发者准备的。通过使用 ENV 工具对 BSP 进行配置，可以开启更多板载资源，实现更多高级功能。
+3、打开RA Smart Congigurator，在Stacks中New Stack添加r_gpt
+![在这里插入图片描述](https://img-blog.csdnimg.cn/eac41ce0974b45e1a1264ad8e1bad7b2.png)
 
-### 快速上手
 
-本 BSP 目前仅提供 MDK5 工程。下面以 MDK5 开发环境为例，介绍如何将系统运行起来。
+4、在Property的Module的General中name定义为`g_uart0`,Channel选0，回调函数改为`user_uart0_callback` ,Pins选择`P100和P101`
+![在这里插入图片描述](https://img-blog.csdnimg.cn/d7a97e99426841c59fef8368b7383c9c.png)
+5、然后Generate Project Content 同步更新刚刚配置的文件
 
-**硬件连接**
+图形化配置已经完成，接下来配置相关代码
+# 3. 代码分析
+1、修改`hal_entry.c`函数，屏蔽LED3普通GPIO输出
 
-使用 USB 数据线连接开发板到 PC，使用 J-link 接口下载和 DEBUG 程序。使用 USB 转串口工具连接 UART7：P613(TXD)、P614(RXD)。
+```cpp
+/*
+ * 程序清单：这是一个 串口 设备使用例程
+ * 例程导出了 uart_sample 命令到控制终端
+ * 命令调用格式：uart_sample
+ * 命令解释：命令第二个参数是要使用的串口设备名称，为空则使用默认的串口设备
+ * 程序功能：通过串口输出字符串"hello RT-Thread!"，然后输出输入的字符
+*/
 
-**编译下载**
+#include <rtthread.h>
+#include "hal_data.h"
+#include <rtdevice.h>
+#include <stdio.h>
+#include <string.h>
 
-- 编译：双击 project.uvprojx 文件，打开 MDK5 工程，编译程序。
+#define LED3_PIN    BSP_IO_PORT_01_PIN_06
 
-> 注意：此工程需要使用 J-Flash Lite 工具烧录程序。建议使用 V7.50 及以上版本烧录工程。[J-Link 下载链接](https://www.segger.com/downloads/jlink/)
-
-- 下载：打开 J-Flash lite 工具，选择芯片型号 R7FA6M4AF，点击 OK 进入工具。选择 BSP 目录下 MDK 编译出的 /object/ra6m4.hex 文件，点击 Program Device 按钮开始烧录。具体操作过程可参考下图步骤：
-
-![image-20211011181555421](docs/picture/jflash1.png) 
-
-![image-20211011182047981](docs/picture/jflash2.png) 
-
-![image-20211011182434519](docs/picture/jflash.png) 
-
-![image-20211011182949604](docs/picture/jflash3.png) 
-
-**查看运行结果**
-
-下载程序成功之后，系统会自动运行并打印系统信息。
-
-连接开发板对应串口到 PC , 在终端工具里打开相应的串口（115200-8-1-N），复位设备后，可以看到 RT-Thread 的输出信息。输入 help 命令可查看系统中支持的命令。
-
-```bash
- \ | /
-- RT -     Thread Operating System
- / | \     4.0.4 build Oct 11 2021
- 2006 - 2021 Copyright by rt-thread team
-
-Hello RT-Thread!
-msh >
-msh >help
-RT-Thread shell commands:
-reboot           - Reboot System
-help             - RT - Thread shell help.
-ps               - List threads in the system.
-free             - Show the memory usage in the system.
-hello            - say hello world
-clear            - clear the terminal screen
-version          - show RT - Thread version information
-list_thread      - list thread
-list_sem         - list semaphore in system
-list_event       - list event in system
-list_mutex       - list mutex in system
-list_mailbox     - list mail box in system
-list_msgqueue    - list message queue in system
-list_timer       - list timer in system
-list_device      - list device in system
-list             - list all commands in system
-
-msh > 
-```
-
-**应用入口函数**
-
-应用层的入口函数在 **bsp\ra6m4-cpk\src\hal_emtry.c** 中 的 `void hal_entry(void)` 。用户编写的源文件可直接放在 src 目录下。
-
-```c
 void hal_entry(void)
 {
     rt_kprintf("\nHello RT-Thread!\n");
 
     while (1)
     {
-        rt_pin_write(LED3_PIN, PIN_HIGH);
-        rt_thread_mdelay(500);
-        rt_pin_write(LED3_PIN, PIN_LOW);
-        rt_thread_mdelay(500);
+        rt_thread_mdelay(10);
     }
 }
+
+#define SAMPLE_UART_NAME       "uart0"
+
+/* 用于接收消息的信号量 */
+static struct rt_semaphore rx_sem;
+static rt_device_t serial;
+
+/* 接收数据回调函数 */
+static rt_err_t uart_input(rt_device_t dev, rt_size_t size)
+{
+    /* 串口接收到数据后产生中断，调用此回调函数，然后发送接收信号量 */
+    rt_sem_release(&rx_sem);
+
+    return RT_EOK;
+}
+
+/*uart0串口输出线程*/
+void serial_thread_entry(void *parameter)
+{
+
+    char str1[50];
+    char HeadByte[50] ="/*KAANSATQRO";
+    while (1)
+    {
+        sprintf(str1, "%s,%d", HeadByte, rt_pin_read(LED3_PIN));
+        sprintf(str1, "%s,%d", str1,rt_pin_read(LED3_PIN));
+        sprintf(str1, "%s%s", str1,"*/ \r\n");
+
+        rt_device_write(serial, 0, str1, (sizeof(str1) - 1));
+        rt_thread_mdelay(200);
+    }
+}
+
+/*控制命令线程*/
+void control_thread_entry(void *parameter)
+{
+    char ch;
+    while (1)
+    {
+        /* 从串口读取一个字节的数据，没有读取到则等待接收信号量 */
+        while (rt_device_read(serial, -1, &ch, 1) != 1)
+        {
+            /* 阻塞等待接收信号量，等到信号量后再次读取数据 */
+            rt_sem_take(&rx_sem, RT_WAITING_FOREVER);
+        }
+        /* 读取到的数据通过串口错位输出 */
+        ch = ch + 0;
+        if(ch=='1')
+        {
+            rt_pin_write(LED3_PIN, PIN_HIGH);
+            rt_thread_mdelay(50);
+            rt_kprintf("\n PIN_HIGH \n");
+        }
+        else if(ch=='0')
+        {
+            rt_pin_write(LED3_PIN, PIN_LOW);
+            rt_thread_mdelay(50);
+            rt_kprintf("\n PIN_LOW \n");
+        }
+        else {
+            rt_kprintf("\n error \n");
+        }
+        rt_device_write(serial, 0, &ch, 1);
+        rt_thread_mdelay(5);
+    }
+}
+
+/*初始化和启动串口输出和控制线程*/
+static int uart_sample(int argc, char *argv[])
+{
+    rt_err_t ret = RT_EOK;
+    char uart_name[RT_NAME_MAX];
+    char str[] = "hello RT-Thread!\r\n";
+    rt_kprintf("Hello RT-Thread!\n");
+    if (argc == 2)
+    {
+        rt_strncpy(uart_name, argv[1], RT_NAME_MAX);
+    }
+    else
+    {
+        rt_strncpy(uart_name, SAMPLE_UART_NAME, RT_NAME_MAX);
+    }
+
+    /* 查找系统中的串口设备 */
+    serial = rt_device_find(uart_name);
+    if (!serial)
+    {
+        rt_kprintf("find %s failed!\n", uart_name);
+        return RT_ERROR;
+    }
+
+    /* 初始化信号量 */
+    rt_sem_init(&rx_sem, "rx_sem", 0, RT_IPC_FLAG_FIFO);
+    /* 以中断接收及轮询发送模式打开串口设备 */
+    rt_device_open(serial, RT_DEVICE_FLAG_INT_RX);
+    /* 设置接收回调函数 */
+    rt_device_set_rx_indicate(serial, uart_input);
+    /* 发送字符串 */
+    rt_device_write(serial, 0, str, (sizeof(str) - 1));
+
+    /* 创建 control_thread 线程 */
+    rt_thread_t control_thread = rt_thread_create("control", control_thread_entry, RT_NULL, 1024, 30, 10);
+    /* 创建成功则启动线程 */
+    if (control_thread != RT_NULL)rt_thread_startup(control_thread);
+
+    /* 创建 serial_thread 线程 */
+    rt_thread_t serial_thread = rt_thread_create("serial", serial_thread_entry, RT_NULL, 1024, 25, 10);
+    /* 创建成功则启动线程 */
+    if (serial_thread != RT_NULL)
+    {
+        rt_thread_startup(serial_thread);
+    }
+    else
+    {
+        ret = RT_ERROR;
+    }
+    return ret;
+
+}
+/* 导出到 msh 命令列表中 */
+MSH_CMD_EXPORT(uart_sample, uart device sample);
+
 ```
 
-### 进阶使用
+其他不变。
 
-**资料及文档**
-
-- [开发板官网主页](https://www2.renesas.cn/cn/zh/products/microcontrollers-microprocessors/ra-cortex-m-mcus/cpk-ra6m4-evaluation-board)
-- [开发板用户手册](https://www2.renesas.cn/cn/zh/document/mah/1527156?language=zh&r=1527191)
-- [瑞萨RA MCU 基础知识](https://www2.renesas.cn/cn/zh/document/gde/1520091)
-- [RA6 MCU 快速设计指南](https://www2.renesas.cn/cn/zh/document/apn/ra6-quick-design-guide)
-- [RA6M4_datasheet](https://www2.renesas.cn/cn/zh/document/dst/ra6m4-group-datasheet)
-- [RA6M4 Group User’s Manual: Hardware](https://www2.renesas.cn/cn/zh/document/man/ra6m4-group-user-s-manual-hardware)
-
-**FSP 配置**
-
-需要修改瑞萨的 BSP 外设配置或添加新的外设端口，需要用到瑞萨的 [FSP](https://www2.renesas.cn/jp/zh/software-tool/flexible-software-package-fsp#document) 配置工具。请务必按照如下步骤完成配置。配置中有任何问题可到[RT-Thread 社区论坛](https://club.rt-thread.org/)中提问。
-
-1. [下载灵活配置软件包 (FSP) | Renesas](https://www.renesas.com/cn/zh/software-tool/flexible-software-package-fsp)，请使用 FSP 3.5.0 版本
-2. 下载安装完成后，需要添加 CPK-RA6M4 开发板的官方板级支持包
-> 打开[ CPK-RA6M4 开发板详情页](https://www2.renesas.cn/jp/zh/products/microcontrollers-microprocessors/ra-cortex-m-mcus/cpk-ra6m4-evaluation-board)，在**“下载”**列表中找到 **”CPK-RA6M4板级支持包“**，点击链接即可下载
-3. 如何将 **”CPK-RA6M4板级支持包“**添加到 FSP 中，请参考文档[如何导入板级支持包](https://www2.renesas.cn/document/ppt/1527171?language=zh&r=1527191)
-4. 请查看文档：[使用 FSP 配置外设驱动](../docs/RA系列使用FSP配置外设驱动.md)，在 MDK 中通过添加自定义命名来打开当前工程的 FSP 配置。
-
-**ENV 配置**
-
-- 如何使用 ENV 工具：[RT-Thread env 工具用户手册](https://www.rt-thread.org/document/site/#/development-tools/env/env)
-
-此 BSP 默认只开启了 UART7 的功能，如果需使用更多高级功能例如组件、软件包等，需要利用 ENV 工具进行配置。
-
-步骤如下：
-1. 在 bsp 下打开 env 工具。
-2. 输入`menuconfig`命令配置工程，配置好之后保存退出。
-3. 输入`pkgs --update`命令更新软件包。
-4. 输入`scons --target=mdk5` 命令重新生成工程。
+**保存完是灰色，没有保存是蓝色。**
+`uart_sample`导 出 到 msh 命 令 列 表 中，实现pwm8的两路输出
 
 
-## FAQ
+# 4. 下载验证
+1、编译重构
+![在这里插入图片描述](https://img-blog.csdnimg.cn/1be071528909403793520449f4afc22c.png)
 
-### 使用 MDK 的 DEBUG 时如果遇到提示  “Error: Flash Download failed Cortex-M33” 怎么办？
+编译成功
 
-可按照下图操作，修改 Utilities 中的选项：
+2、下载程序
+![在这里插入图片描述](https://img-blog.csdnimg.cn/5964b3a9e1234451b07d001bfc57d185.png)
+下载成功
 
-![image-20211214102231248](docs/picture/readme_faq1.png) 
+3、CMD串口调试
 
-## 联系人信息
+![在这里插入图片描述](https://img-blog.csdnimg.cn/181227ee2ed64ef2801477ece50cf41c.png)
+然后板载复位，输入：`uart_sample`
 
-在使用过程中若您有任何的想法和建议，建议您通过以下方式来联系到我们  [RT-Thread 社区论坛](https://club.rt-thread.org/)
+此时可以与Serial Studio一起联动啦！🎉🎉🎉
+请参照[【开源的串口可视化工具——Serial Studio】](https://blog.csdn.net/VOR234/article/details/125910113)
+效果如下
+![请添加图片描述](https://img-blog.csdnimg.cn/e165573593de4fcebc29671cec17313b.gif)
 
-## 贡献代码
+这样我们就可以天马行空啦!
+![请添加图片描述](https://img-blog.csdnimg.cn/92099d4d054b4b2cbd39b95719739a90.gif)
 
-如果您对 CPK-RA6M4 感兴趣，并且有一些好玩的项目愿意与大家分享的话欢迎给我们贡献代码，您可以参考 [如何向 RT-Thread 代码贡献](https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/development-guide/github/github)。
+参考文献；
+[【基于 RT-Thread Studio的CPK-RA6M4 开发板环境搭建】](https://blog.csdn.net/vor234/article/details/125634313)
+[【开源的串口可视化工具——Serial Studio】](https://blog.csdn.net/VOR234/article/details/125910113)
